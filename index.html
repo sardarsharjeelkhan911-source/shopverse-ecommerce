@@ -181,9 +181,33 @@
     </div>
   </aside>
 
+  <!-- ===== Checkout Modal ===== -->
+  <div class="modal" id="checkoutModal">
+    <div class="dialog">
+      <div class="dialog-head">
+        <h3>Checkout</h3>
+        <button class="icon-btn" id="closeCheckout" aria-label="Close">&times;</button>
+      </div>
+      <form id="checkoutForm" class="dialog-body">
+        <div class="checkout-summary" id="checkoutSummary"></div>
+        <div class="form-grid">
+          <label>Full name *<input type="text" id="coName" required placeholder="Ali Khan" /></label>
+          <label>Phone *<input type="tel" id="coPhone" required placeholder="03xx xxxxxxx" /></label>
+          <label>Email<input type="email" id="coEmail" placeholder="ali@gmail.com" /></label>
+          <label>City *<input type="text" id="coCity" required placeholder="Karachi" /></label>
+          <label class="full">Address *<input type="text" id="coLine1" required placeholder="House #, Street, Area" /></label>
+          <label class="full">Coupon code<input type="text" id="coCoupon" placeholder="e.g. SAVE10" /></label>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="coSubmit">Place Order</button>
+        <p class="cod-note">&#128179; Cash on Delivery</p>
+      </form>
+    </div>
+  </div>
+
   <!-- ===== Toast ===== -->
   <div class="toast" id="toast"></div>
 
+  <script src="js/shopverse-api.js"></script>
   <script src="js/script.js"></script>
 </body>
 </html>

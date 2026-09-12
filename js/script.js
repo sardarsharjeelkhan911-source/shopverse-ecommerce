@@ -10,7 +10,8 @@
 
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => document.querySelectorAll(sel);
-  const fmt = (n) => "Rs. " + n.toLocaleString("en-PK");
+  let currencySymbol = "Rs.";
+  const fmt = (n) => currencySymbol + " " + n.toLocaleString("en-PK");
 
   const emojis = ["\uD83C\uDFA7", "\uD83D\uDCAA", "\uD83D\uDC54", "\uD83D\uDC5C", "\uD83D\uDCA1", "\uD83C\uDF73", "\uD83D\uDDA5", "\uD83D\uDC41", "\uD83E\uDDE1", "\uD83D\uDD0B", "\uD83C\uDF6E", "\uD83D\uDD0A"];
 
@@ -30,14 +31,41 @@
 
   // ---------- Load ----------
   async function init() {
-    const res = await fetch("products.json");
-    state.products = await res.json();
-    state.products.forEach((p, i) => (p.__emoji = emojis[i % emojis.length]));
+    try {
+      await ShopVerseAPI.connect();
+      state.products = ShopVerseAPI.products() || [];
+    } catch (e) {
+      state.products = [];
+    }
+    // ensure every product has a stable display emoji/graphic
+    state.products.forEach((p, i) => {
+      if (!p.__emoji) p.__emoji = emojis[i % emojis.length];
+    });
+    renderBranding();
     renderCategories();
     renderProducts();
     renderCart();
     bindEvents();
     updateCartCount();
+    updateReviews();
+  }
+
+  // ---------- Branding (from store settings) ----------
+  function renderBranding() {
+    try {
+      var s = ShopVerseAPI.settings() || {};
+      if (s.store_name) document.title = s.store_name + " — Online Shopping Store";
+      if (s.store_tagline) {
+        var p = document.querySelector(".hero-text p");
+        if (p) p.textContent = s.store_tagline;
+      }
+      if (s.announcement) {
+        var badge = document.querySelector(".hero-badge");
+        if (badge) badge.textContent = "\u2605 " + s.announcement;
+      }
+      var symbol = s.currency_symbol || s.currencySymbol || "Rs.";
+      if (symbol) currencySymbol = symbol;
+    } catch (e) { /* ignore */ }
   }
 
   // ---------- Categories ----------
@@ -72,12 +100,12 @@
     const badge = p.badge ? `<span class="badge">${p.badge}</span>` : "";
     const stars = "&#9733;".repeat(Math.round(p.rating));
     const old = p.oldPrice ? `<span class="old-price">${fmt(p.oldPrice)}</span>` : "";
+    const img = p.imageUrl
+      ? `<div class="product-img" style="background:url(${p.imageUrl}) center/cover no-repeat, #f1f5f9">${badge}</div>`
+      : `<div class="product-img" style="background:${p.color}">${badge}<span class="product-emoji">${p.__emoji}</span></div>`;
     return `
       <div class="product-card">
-        <div class="product-img" style="background:${p.color}">
-          ${badge}
-          <span class="product-emoji">${p.__emoji}</span>
-        </div>
+        ${img}
         <div class="product-body">
           <span class="product-cat">${p.category}</span>
           <h3>${p.name}</h3>
@@ -89,7 +117,7 @@
           </div>
           <div class="product-foot">
             <div class="price">${fmt(p.price)} <small>PKR</small>${old}</div>
-            <button class="add-btn" data-add="${p.id}">Add to Cart</button>
+            <button class="add-btn" data-add="${p.id}" ${p.stock === 0 ? "disabled" : ""}>${p.stock === 0 ? "Out of stock" : "Add to Cart"}</button>
           </div>
         </div>
       </div>`;
@@ -136,7 +164,7 @@
           if (!p) return "";
           return `
             <div class="cart-item">
-              <div class="cart-item-color" style="background:${p.color}">${p.__emoji}</div>
+              <div class="cart-item-color" style="${p.imageUrl ? `background:url(${p.imageUrl}) center/cover no-repeat, #f1f5f9` : `background:${p.color}`}">${p.imageUrl ? "" : p.__emoji}</div>
               <div class="cart-item-info">
                 <h4>${p.name}</h4>
                 <p>${fmt(p.price)}</p>
@@ -215,7 +243,7 @@
     // Cart drawer open/close
     $("#cartBtn").addEventListener("click", () => openCart());
     $("#closeCart").addEventListener("click", closeCart);
-    $("#overlay").addEventListener("click", closeCart);
+    $("#overlay").addEventListener("click", function () { closeCart(); closeCheckoutModal(); });
 
     // Cart interactions
     $("#cartItems").addEventListener("click", (e) => {
@@ -227,6 +255,10 @@
 
     // Checkout
     $("#checkoutBtn").addEventListener("click", checkout);
+    const coForm = $("#checkoutForm");
+    if (coForm) coForm.addEventListener("submit", placeOrderOnline);
+    const coClose = $("#closeCheckout");
+    if (coClose) coClose.addEventListener("click", closeCheckoutModal);
 
     // Newsletter
     $("#newsletterForm").addEventListener("submit", (e) => {
@@ -246,17 +278,111 @@
     $("#overlay").classList.remove("open");
   }
 
-  function checkout() {
+  function openCheckoutModal() {
+    const modal = $("#checkoutModal");
+    if (!modal) return false;
+    modal.classList.add("open");
+    modal.querySelector(".checkout-items").innerHTML = state.cart
+      .map((ci) => {
+        const p = state.products.find((x) => x.id === ci.id);
+        if (!p) return "";
+        return `<div class="checkout-line"><span>${p.name} &times; ${ci.qty}</span><span>${fmt(p.price * ci.qty)}</span></div>`;
+      })
+      .join("") || '<div class="checkout-line"><span>Cart is empty</span></div>';
+    const sub = cartTotal();
+    const taxNote = state.demoTotals && state.demoTotals.tax ? `<div class="checkout-line"><span>Tax (included)</span><span>${fmt(state.demoTotals.tax)}</span></div>` : "";
+    const discountNote = state.demoTotals && state.demoTotals.discount ? `<div class="checkout-line"><span>Discount</span><span>-${fmt(state.demoTotals.discount)}</span></div>` : "";
+    $("#checkoutSummary").innerHTML =
+      `<div class="checkout-line"><span>Subtotal</span><span>${fmt(sub)}</span></div>` +
+      (state.demoTotals && state.demoTotals.discount ? `<div class="checkout-line"><span>Coupon discount</span><span>-${fmt(state.demoTotals.discount)}</span></div>` : discountNote) +
+      taxNote +
+      `<div class="checkout-line strong"><span>Total</span><span id="coGrandTotal">${fmt(state.demoTotals ? state.demoTotals.grand : sub)}</span></div>`;
+    return true;
+  }
+
+  function closeCheckoutModal() {
+    const modal = $("#checkoutModal");
+    if (modal) modal.classList.remove("open");
+    $("#overlay").classList.remove("open");
+  }
+
+  function updateReviews() {
+    const s = ShopVerseAPI.settings() || {};
+    const contactBlock = document.querySelectorAll(".footer-grid > div")[3];
+    if (!contactBlock || (!s.support_phone && !s.support_email)) return;
+    const ps = contactBlock.querySelectorAll("p");
+    if (s.support_phone && ps[0]) ps[0].textContent = "\u260E " + s.support_phone;
+    if (s.support_email && ps[1]) ps[1].textContent = "\u2709 " + s.support_email;
+  }
+
+  async function checkout() {
     if (!state.cart.length) {
       showToast("Your cart is empty");
       return;
     }
+    if (ShopVerseAPI.isOffline()) {
+      placeOrderLocal();
+      return;
+    }
+    // open the checkout modal to collect delivery details
+    if (openCheckoutModal()) {
+      closeCart();
+      $("#overlay").classList.add("open");
+    } else {
+      placeOrderLocal();
+    }
+  }
+
+  function buildOrderPayload() {
+    const g = (id) => $("#" + id) ? $("#" + id).value.trim() : "";
+    return {
+      items: state.cart.map((ci) => ({ productId: ci.id, qty: ci.qty })),
+      customer: {
+        name: g("coName") || undefined,
+        email: g("coEmail") || undefined,
+        phone: g("coPhone") || undefined
+      },
+      address: {
+        fullName: g("coName"),
+        phone: g("coPhone"),
+        line1: g("coLine1"),
+        city: g("coCity")
+      },
+      couponCode: g("coCoupon") || undefined,
+      paymentMethod: "COD"
+    };
+  }
+
+  async function placeOrderOnline(ev) {
+    ev.preventDefault();
+    if (!state.cart.length) return;
+    const btn = $("#coSubmit");
+    btn.disabled = true;
+    btn.textContent = "Placing order...";
+    const payload = buildOrderPayload();
+    try {
+      const order = await ShopVerseAPI.createOrder(payload);
+      state.cart = [];
+      saveCart();
+      renderCart();
+      closeCheckoutModal();
+      showToast("\uD83C\uDF89 Order " + (order.orderNumber || "") + " placed! Total " + fmt(order.grandTotal) + " — COD");
+    } catch (err) {
+      showToast("\u26D4 " + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Place Order";
+    }
+  }
+
+  function placeOrderLocal() {
     const total = cartTotal();
     state.cart = [];
     saveCart();
     renderCart();
     closeCart();
-    showToast("\uD83C\uDF89 Order placed! " + fmt(total) + " — Cash on Delivery");
+    closeCheckoutModal();
+    showToast("\uD83C\uDF89 (Demo) Order placed! " + fmt(total) + " — start the backend to go live");
   }
 
   document.addEventListener("DOMContentLoaded", init);

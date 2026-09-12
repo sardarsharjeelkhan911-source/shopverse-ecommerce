@@ -490,6 +490,80 @@ section { padding: 70px 0; }
 }
 .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
 
+/* ===== Checkout Modal ===== */
+.modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 200;
+  transition: opacity 0.25s;
+}
+.modal.open { visibility: visible; opacity: 1; pointer-events: auto; }
+.modal .dialog {
+  width: 100%;
+  max-width: 480px;
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(16px);
+  transition: transform 0.25s;
+}
+.modal.open .dialog { transform: translateY(0); }
+.dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.dialog-head h3 { font-size: 18px; }
+.dialog-body { padding: 20px; }
+.checkout-summary {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+.checkout-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--text);
+  padding: 2px 0;
+}
+.checkout-line.strong { font-weight: 700; color: var(--dark); font-size: 15px; }
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.form-grid label { font-size: 13px; color: var(--muted); font-weight: 600; }
+.form-grid input {
+  width: 100%;
+  margin-top: 5px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  color: var(--dark);
+  background: var(--white);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.form-grid input:focus { border-color: var(--primary); }
+.form-grid .full { grid-column: 1 / -1; }
+.product-img.disabled, .add-btn[disabled] { cursor: not-allowed; opacity: 0.6; }
+
 /* ===== Responsive ===== */
 @media (max-width: 900px) {
   .hero-grid, .promo-grid { grid-template-columns: 1fr; }
